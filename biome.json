@@ -1,6 +1,6 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
-  "files": { "includes": ["src/**", "tests/**", "playwright.config.ts"] },
+  "files": { "includes": ["src/**", "tests/**", "api/**", "vite.config.ts", "playwright.config.ts"] },
   "formatter": { "enabled": false },
   "linter": { "enabled": true, "rules": { "recommended": true } },
   "assist": { "enabled": false }

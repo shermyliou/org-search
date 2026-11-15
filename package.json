@@ -10,7 +10,7 @@
     "build": "pnpm run typecheck:data && tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "pnpm run typecheck:data && tsc --noEmit",
-    "lint": "biome lint --error-on-warnings src tests playwright.config.ts",
+    "lint": "biome lint --error-on-warnings src tests api vite.config.ts playwright.config.ts",
     "typecheck:data": "tsc --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2023 --esModuleInterop --skipLibCheck --allowImportingTsExtensions scripts/organize-mission2.mts",
     "test": "playwright test",
     "check": "pnpm run lint && pnpm run build && pnpm run data:check && pnpm test",
