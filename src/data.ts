@@ -1,38 +1,50 @@
 import Fuse from 'fuse.js';
-import snapshot from '../data/mission2.json';
+import initialSnapshot from '../data/mission2.json';
+import type { Mission2Snapshot } from './lib/organize/types';
 
-type SourceOrganization = (typeof snapshot.organizations)[number];
+type Snapshot = typeof initialSnapshot;
+type SourceOrganization = Snapshot['organizations'][number];
 export type Organization = Omit<SourceOrganization, 'sourceFields'> & {
   sourceFields: { [Field in keyof SourceOrganization['sourceFields']]: SourceOrganization['sourceFields'][Field] };
 };
-export type HistoryRecord = (typeof snapshot.records)[number];
-export type Insight = (typeof snapshot.insights)[number];
-export const organizations: Organization[] = snapshot.organizations;
-export const sourceFilename = snapshot.source.filename;
+export type HistoryRecord = Snapshot['records'][number];
+export type Insight = Snapshot['insights'][number];
 
-const byId = new Map(organizations.map(org => [org.id, org]));
-const recordsById = new Map(snapshot.records.map(record => [record.id, record]));
+let currentSnapshot: Snapshot = initialSnapshot;
+export const organizations: Organization[] = [...currentSnapshot.organizations];
+export let sourceFilename = currentSnapshot.source.filename;
 
-if (snapshot.schemaVersion !== 1 || !organizations.length) {
-  throw new Error('data/mission2.json 版本不符或沒有組織資料，請執行 pnpm run data:check。');
+export function getSourceFilename(): string {
+  return sourceFilename;
 }
-if (byId.size !== organizations.length || recordsById.size !== snapshot.records.length) {
-  throw new Error('data/mission2.json 有重複編號，請執行 pnpm run data:check。');
-}
-for (const org of organizations) {
-  for (const id of org.recordIds) {
-    const record = recordsById.get(id);
-    if (!record || record.status !== 'confirmed' || record.orgId !== org.id) {
-      throw new Error(`組織 ${org.id} 的正式歷史 ${id} 對應錯誤。`);
+
+function validateAndIndex(candidate: Snapshot) {
+  if (candidate.schemaVersion !== 1 || !candidate.organizations.length) {
+    throw new Error('data/mission2.json 版本不符或沒有組織資料，請執行 pnpm run data:check。');
+  }
+  const nextById = new Map<string, Organization>(candidate.organizations.map(org => [org.id, org]));
+  const nextRecordsById = new Map<string, HistoryRecord>(candidate.records.map(record => [record.id, record]));
+  if (nextById.size !== candidate.organizations.length || nextRecordsById.size !== candidate.records.length) {
+    throw new Error('data/mission2.json 有重複編號，請執行 pnpm run data:check。');
+  }
+  for (const org of candidate.organizations) {
+    for (const id of org.recordIds) {
+      const record = nextRecordsById.get(id);
+      if (!record || record.status !== 'confirmed' || record.orgId !== org.id) {
+        throw new Error(`組織 ${org.id} 的正式歷史 ${id} 對應錯誤。`);
+      }
+    }
+    for (const id of org.candidateRecordIds) {
+      const record = nextRecordsById.get(id);
+      if (!record || record.status !== 'pending' || record.orgId !== null || record.candidateOrgId !== org.id) {
+        throw new Error(`組織 ${org.id} 的待確認歷史 ${id} 對應錯誤。`);
+      }
     }
   }
-  for (const id of org.candidateRecordIds) {
-    const record = recordsById.get(id);
-    if (!record || record.status !== 'pending' || record.orgId !== null || record.candidateOrgId !== org.id) {
-      throw new Error(`組織 ${org.id} 的待確認歷史 ${id} 對應錯誤。`);
-    }
-  }
+  return { nextById, nextRecordsById };
 }
+
+let { nextById: byId, nextRecordsById: recordsById } = validateAndIndex(currentSnapshot);
 
 const search = new Fuse(organizations, {
   keys: [
@@ -50,6 +62,17 @@ const search = new Fuse(organizations, {
   threshold: 0.25,
 });
 
+export function setSnapshot(newSnapshot: Mission2Snapshot | Snapshot): void {
+  const candidate = newSnapshot as Snapshot;
+  const indexed = validateAndIndex(candidate);
+  currentSnapshot = candidate;
+  organizations.splice(0, organizations.length, ...candidate.organizations);
+  sourceFilename = candidate.source.filename;
+  byId = indexed.nextById;
+  recordsById = indexed.nextRecordsById;
+  search.setCollection(organizations);
+}
+
 export function searchOrganizations(query: string, collection: Organization[] = organizations): Organization[] {
   search.setCollection(collection);
   const term = query.trim();
@@ -62,16 +85,20 @@ export function getOrganization(id: string): Organization {
   return org;
 }
 
+export function getRecord(id: string): HistoryRecord | undefined {
+  return recordsById.get(id);
+}
+
 export function getHistory(org: Organization) {
   const newestFirst = (records: HistoryRecord[]) => records.sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
   return {
-    confirmed: newestFirst(snapshot.records.filter(record => record.status === 'confirmed' && record.orgId === org.id)),
-    pending: newestFirst(snapshot.records.filter(record => record.status === 'pending' && record.candidateOrgId === org.id)),
+    confirmed: newestFirst(currentSnapshot.records.filter(record => record.status === 'confirmed' && record.orgId === org.id)),
+    pending: newestFirst(currentSnapshot.records.filter(record => record.status === 'pending' && record.candidateOrgId === org.id)),
   };
 }
 
 export function getInsights(org: Organization): Insight[] {
-  return snapshot.insights.filter(insight => insight.orgId === org.id).sort((a, b) => b.date.localeCompare(a.date));
+  return currentSnapshot.insights.filter(insight => insight.orgId === org.id).sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export function contactCounts(records: HistoryRecord[]) {

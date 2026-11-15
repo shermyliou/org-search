@@ -16,10 +16,11 @@ function icon(paths: typeof Search01Icon) {
 }
 
 async function start() {
-  const [{ organizations, sourceFilename, getOrganization, getHistory, searchOrganizations }, { defaultHistoryOptions, renderHistory }, { renderGuide }] = await Promise.all([import('./data'), import('./history'), import('./guide')]);
+  const [{ organizations, getSourceFilename, getOrganization, getHistory, searchOrganizations }, { defaultHistoryOptions, renderHistory }, { renderGuide }, { renderOrganizeView }] = await Promise.all([import('./data'), import('./history'), import('./guide'), import('./organize')]);
+  type OrganizeViewState = import('./organize').OrganizeViewState;
   type Organization = (typeof organizations)[number];
   type Tab = 'history' | 'notes' | 'guide' | 'other';
-  type View = { kind: 'search' } | { kind: 'detail'; orgId: string; tab: Tab };
+  type View = { kind: 'search' } | { kind: 'detail'; orgId: string; tab: Tab } | { kind: 'organize' };
   type Note = { notebook: Notebook; error: string | null; readFailed: boolean; activity: 'idle' | 'saving' | 'sending' };
   const tabs = [
     { id: 'history', label: '參與記錄' },
@@ -28,6 +29,7 @@ async function start() {
     { id: 'other', label: '其他資料' },
   ] satisfies { id: Tab; label: string }[];
   let view: View = { kind: 'search' };
+  let organizeState: OrganizeViewState = { step: 'upload', isSubmitting: false, error: null };
   let query = '';
   const notes = new Map<string, Note>();
   type Profile = { fields: FieldEdits; error: string | null; readFailed: boolean; revision: number };
@@ -46,6 +48,7 @@ async function start() {
   root.innerHTML = `
     <header class="app-header">
       <h1>組織速查</h1>
+      <button id="organize-toggle" class="text-button compact-button" type="button" aria-pressed="false">資料整理</button>
       <button id="pip-toggle" class="text-button icon-button" type="button" aria-label="浮動視窗" title="浮動視窗">${icon(PictureInPictureIcon)}<span class="sr-only">浮動視窗</span></button>
     </header>
     <main>
@@ -68,6 +71,8 @@ async function start() {
     return found;
   }
   const input = element<HTMLInputElement>('#search');
+  const searchForm = element<HTMLFormElement>('.search-form');
+  const organizeToggle = element<HTMLButtonElement>('#organize-toggle');
   const content = element<HTMLDivElement>('#view');
   const clearButton = element<HTMLButtonElement>('#clear-search');
   const errorMessage = element<HTMLParagraphElement>('#pip-error');
@@ -167,7 +172,7 @@ async function start() {
         ['最近一次接觸', display(org.metrics.latestContact)],
         ['最近資料日期', display(org.metrics.latestData)],
         ['主檔來源', `${escapeHtml(org.source.sheet)} · 第 ${org.source.row} 列`],
-        ['來源檔案', escapeHtml(sourceFilename)],
+        ['來源檔案', escapeHtml(getSourceFilename())],
       ])}<p class="muted small">最近一次接觸只計接觸紀錄；最近資料日期也包含顧問筆記。</p>
       <details><summary>查看匯入主檔原文</summary>${rows(Object.entries(getOrganization(org.id).sourceFields).map(([key, value]) => [key, display(value)]))}</details>
     </section>`;
@@ -209,8 +214,27 @@ async function start() {
   }
 
   function render() {
-    if (view.kind === 'search') renderSearch();
-    else renderDetail(view.orgId, view.tab);
+    const isOrganize = view.kind === 'organize';
+    organizeToggle.setAttribute('aria-pressed', String(isOrganize));
+    searchForm.hidden = isOrganize;
+    if (view.kind === 'search') {
+      renderSearch();
+    } else if (view.kind === 'detail') {
+      renderDetail(view.orgId, view.tab);
+    } else {
+      renderOrganizeView(
+        content,
+        organizeState,
+        next => {
+          organizeState = next;
+          if (view.kind === 'organize') render();
+        },
+        () => {
+          view = { kind: 'search' };
+          render();
+        },
+      );
+    }
   }
 
   function performSearch() {
@@ -295,6 +319,10 @@ async function start() {
   input.addEventListener('keydown', event => { if (event.key === 'Escape') clearSearch(); });
   root.querySelector('form')?.addEventListener('submit', event => event.preventDefault());
   clearButton.addEventListener('click', clearSearch);
+  organizeToggle.addEventListener('click', () => {
+    view = view.kind === 'organize' ? { kind: 'search' } : { kind: 'organize' };
+    render();
+  });
 
   content.addEventListener('click', async event => {
     if (!isElement(event.target)) return;
