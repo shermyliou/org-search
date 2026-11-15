@@ -224,3 +224,27 @@ test('phone questions cite confirmed evidence and distinguish call purpose from 
   await expect(page.locator(`#record-${record.id}`)).toBeFocused();
   await expect(page.locator(`#record-${record.id}`)).toContainText(record.text);
 });
+
+test('detail page filter dropdowns leave enough vertical space to show text', async ({ page }) => {
+  const org = snapshot.organizations[0];
+  if (!org) throw new Error('Organization data is required');
+  await page.goto('/');
+  await openOrganization(page, org.id);
+  const selects = page.locator('.filter-row select');
+  await expect(selects).toHaveCount(3);
+  const metrics = await selects.evaluateAll(elements =>
+    elements.map(el => {
+      const style = getComputedStyle(el);
+      const paddingY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const contentHeight = el.clientHeight - paddingY;
+      return {
+        control: el.getAttribute('data-history-control'),
+        contentHeight,
+        fontSize: parseFloat(style.fontSize),
+      };
+    })
+  );
+  for (const item of metrics) {
+    expect(item.contentHeight, `${item.control} content height`).toBeGreaterThanOrEqual(item.fontSize);
+  }
+});
