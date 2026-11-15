@@ -1,6 +1,7 @@
 # Local reference material and datasets
 /docs/
-/data/
+/data/*
+!/data/mission2.json
 /scripts/mission2-annotations.json
 *.xlsx
 *.xls
