@@ -1,0 +1,21 @@
+# Local reference material and datasets
+/docs/
+/data/
+/scripts/mission2-annotations.json
+*.xlsx
+*.xls
+*.xlsm
+*.xltx
+
+# Dependencies and generated output
+node_modules/
+dist/
+.vite/
+coverage/
+*.log
+
+# Local settings and operating system files
+.env
+.env.*
+!.env.example
+.DS_Store
