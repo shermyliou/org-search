@@ -411,8 +411,16 @@ export function renderOrganizeView(
             const payload: ApplyRequest = {
               parsed: analyze.parsed,
               annotations: {
-                notes: [...noteDecisions.values()].filter(d => d.status === 'approved').map(d => d.draft),
-                pending: [...pendingDecisions.values()].filter(d => d.status === 'approved').map(d => d.draft),
+                notes: [...noteDecisions.values()].map(d =>
+                  d.status === 'approved'
+                    ? d.draft
+                    : { ...d.draft, themes: [], actionQuote: '', audiences: [], issueSuggestions: [] },
+                ),
+                pending: [...pendingDecisions.values()].map(d =>
+                  d.status === 'approved'
+                    ? d.draft
+                    : { ...d.draft, candidateOrgId: null, reason: d.draft.reason || '略過待確認' },
+                ),
               },
             };
             const response = await fetch('/api/organize/apply', {
